@@ -126,6 +126,20 @@ class ExMLP(nn.Module):
         return x
 
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, hidden_size, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        pe = torch.zeros(max_len, hidden_size)
+        position = torch.arange(0, max_len).unsqueeze(1).float()
+        div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * -(np.log(10000.0) / hidden_size))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return x + self.pe[:, :x.size(1)]
+
 class ExRestSelfAtten(nn.Module):
     def __init__(self, input_size, output_size, hidden_size):
         super(ExRestSelfAtten, self).__init__()
@@ -144,25 +158,17 @@ class ExRestSelfAtten(nn.Module):
         self.W_v = MatMul(hidden_size, hidden_size, use_bias=False)
         self.out = MatMul(hidden_size, output_size)
 
-        self.positional_encoding = nn.Parameter(
-            torch.nn.init.xavier_normal_(torch.empty(1, 2 * atten_size + 1, hidden_size)), requires_grad=True)
+        self.positional_encoding = PositionalEncoding(hidden_size)
 
     def name(self):
         return "MLP_atten"
 
     def forward(self, x):
-        # Token-wise MLP + Restricted Attention network implementation
-
+        x = self.positional_encoding(x)
         x = self.layer1(x)
         x = self.ReLU(x)
 
-        # Add positional encoding
-        seq_len = x.size(1)
-        position_ids = torch.arange(seq_len, dtype=torch.long, device=x.device).unsqueeze(0).unsqueeze(-1)
-        position_encoding = self.positional_encoding[:, :seq_len, :]
-        x = x + position_encoding
-
-        # generating x in offsets between -atten_size and atten_size 
+        # generating x in offsets between -atten_size and atten_size
         # with zero padding at the ends
 
         padded = pad(x, (0, 0, atten_size, atten_size, 0, 0))
