@@ -17,18 +17,18 @@ batch_size = 32
 output_size = 2
 hidden_size = 32  # to experiment with
 
-run_recurrent = True  # else run Token-wise MLP
+run_recurrent = False  # else run Token-wise MLP
 use_RNN = False  # otherwise GRU
 atten_size = 0  # atten > 0 means using restricted self atten
 
-reload_model = False
-num_epochs = 10
-learning_rate = 0.005
+reload_model = True
+num_epochs = 15
+learning_rate = 0.001
 test_interval = 50
 
 # Loading sataset, use toy = True for obtaining a smaller dataset
 
-train_dataset, test_dataset, num_words, input_size = ld.get_data_set(batch_size)
+train_dataset, test_dataset, num_words, input_size = ld.get_data_set(batch_size, toy=True)
 
 
 # Special matrix multipication layer (like torch.Linear but can operate on arbitrary sized
@@ -111,6 +111,7 @@ class ExMLP(nn.Module):
 
         # Token-wise MLP network weights
         self.layer1 = MatMul(input_size, hidden_size)
+        self.layer2 = MatMul(hidden_size, output_size)
         # additional layer(s)
 
     def name(self):
@@ -121,8 +122,8 @@ class ExMLP(nn.Module):
 
         x = self.layer1(x)
         x = self.ReLU(x)
-        # rest
-
+        x = self.layer2(x)
+        # x = self.ReLU(x)
         return x
 
 
@@ -180,14 +181,13 @@ class ExRestSelfAtten(nn.Module):
 def print_review(rev_text, sbs1, sbs2, lbl1, lbl2):
     print(rev_text[:30])
     print("Sub-scores:")
-    for i in range(10):
-        print(rev_text[i], sbs1[i], sbs2[i])
-    print("Final scores:")
-    print(sbs1.mean(), sbs2.mean())
-    print("Predictions:")
-    print(torch.nn.functional.softmax(torch.tensor([sbs1.mean(), sbs2.mean()]), 0))
-    print("True labels:")
-    print(lbl1, lbl2)
+    for i in range(min(len(rev_text), 10)):
+        print(f"word={rev_text[i]}, score of pos={sbs1[i].item()}, score of neg={sbs2[i].item()}")
+    print("\nFinal scores:")
+    print(f"Final scores: pos={sbs1.mean().item()}, neg={sbs2.mean().item()}")
+    print(f"prediction={torch.nn.functional.softmax(torch.tensor([sbs1.mean(), sbs2.mean()]), 0).tolist()}")
+    print(f"True label: pos={lbl1.item()}, neg={lbl2.item()}")
+    print("\n")
 
 
 # select model to use
@@ -235,7 +235,7 @@ for epoch in range(num_epochs):
             test_iter = False
 
         # Recurrent nets (RNN/GRU)
-
+        sub_score = []
         if run_recurrent:
             hidden_state = model.init_hidden(int(labels.shape[0]))
 
@@ -246,7 +246,7 @@ for epoch in range(num_epochs):
 
             # Token-wise networks (MLP / MLP + Atten.)
 
-            sub_score = []
+
             if atten_size > 0:
                 # MLP + atten
                 sub_score, atten_weights = model(reviews)
@@ -264,10 +264,10 @@ for epoch in range(num_epochs):
 
         # optimize in training iterations
 
-        if not test_iter:
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+        # if not test_iter:
+        #     optimizer.zero_grad()
+        #     loss.backward()
+        #     optimizer.step()
 
         # averaged losses
         if test_iter:
@@ -287,8 +287,8 @@ for epoch in range(num_epochs):
             )
 
             if not run_recurrent:
-                nump_subs = sub_score.detach().numpy()
-                labels = labels.detach().numpy()
+                nump_subs = sub_score.detach()
+                labels = labels.detach()
                 print_review(reviews_text[0], nump_subs[0, :, 0], nump_subs[0, :, 1], labels[0, 0], labels[0, 1])
 
     # accuracy = epoch_accuracy / len(train_dataset)
@@ -296,7 +296,7 @@ for epoch in range(num_epochs):
     train_accuracies.append(sum(epoch_train_accuracies)/len(epoch_train_accuracies))
 
 # saving the model
-torch.save(model, model.name() + ".pth")
+torch.save(model.state_dict(), model.name() + ".pth")
 
 fig, ax = plt.subplots()
 ax.plot(train_accuracies, label='Train accuracy')
