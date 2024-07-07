@@ -1,5 +1,4 @@
 import torch
-from torchtext.legacy.data import Field
 import torchtext as tx
 from torchtext.vocab import GloVe
 from torchtext.datasets import IMDB
@@ -8,6 +7,8 @@ import re
 from torch.utils.data import DataLoader
 from torchtext.data.functional import to_map_style_dataset
 import pandas as pd
+from torchtext import disable_torchtext_deprecation_warning
+disable_torchtext_deprecation_warning()
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
