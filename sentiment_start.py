@@ -21,14 +21,14 @@ run_recurrent = False  # else run Token-wise MLP
 use_RNN = False  # otherwise GRU
 atten_size = 5  # atten > 0 means using restricted self atten
 
-reload_model = True
-num_epochs = 15
+reload_model = False
+num_epochs = 1
 learning_rate = 0.001
 test_interval = 50
 
 # Loading sataset, use toy = True for obtaining a smaller dataset
 
-train_dataset, test_dataset, num_words, input_size = ld.get_data_set(batch_size, toy=True)
+train_dataset, test_dataset, num_words, input_size = ld.get_data_set(batch_size, toy=False)
 
 
 # Special matrix multipication layer (like torch.Linear but can operate on arbitrary sized
@@ -291,10 +291,10 @@ for epoch in range(num_epochs):
 
         # optimize in training iterations
 
-        # if not test_iter:
-        #     optimizer.zero_grad()
-        #     loss.backward()
-        #     optimizer.step()
+        if not test_iter:
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
         # averaged losses
         if test_iter:
