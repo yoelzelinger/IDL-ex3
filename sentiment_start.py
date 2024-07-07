@@ -19,7 +19,7 @@ hidden_size = 32  # to experiment with
 
 run_recurrent = True  # else run Token-wise MLP
 use_RNN = False  # otherwise GRU
-atten_size = 0  # atten > 0 means using restricted self atten
+atten_size = 5  # atten > 0 means using restricted self atten
 
 reload_model = False
 num_epochs = 10
@@ -140,7 +140,12 @@ class ExRestSelfAtten(nn.Module):
 
         self.layer1 = MatMul(input_size, hidden_size)
         self.W_q = MatMul(hidden_size, hidden_size, use_bias=False)
-        # rest ...
+        self.W_k = MatMul(hidden_size, hidden_size, use_bias=False)
+        self.W_v = MatMul(hidden_size, hidden_size, use_bias=False)
+        self.out = MatMul(hidden_size, output_size)
+
+        self.positional_encoding = nn.Parameter(
+            torch.nn.init.xavier_normal_(torch.empty(1, 2 * atten_size + 1, hidden_size)), requires_grad=True)
 
     def name(self):
         return "MLP_atten"
@@ -150,6 +155,12 @@ class ExRestSelfAtten(nn.Module):
 
         x = self.layer1(x)
         x = self.ReLU(x)
+
+        # Add positional encoding
+        seq_len = x.size(1)
+        position_ids = torch.arange(seq_len, dtype=torch.long, device=x.device).unsqueeze(0).unsqueeze(-1)
+        position_encoding = self.positional_encoding[:, :seq_len, :]
+        x = x + position_encoding
 
         # generating x in offsets between -atten_size and atten_size 
         # with zero padding at the ends
@@ -167,12 +178,29 @@ class ExRestSelfAtten(nn.Module):
 
         # Applying attention layer
 
-        # query = ...
-        # keys = ...
-        # vals = ...
+        query = self.W_q(x).unsqueeze(2)
+        keys = self.W_k(x_nei)
+        vals = self.W_v(x_nei)
+        attention_weights = self.softmax(torch.matmul(query, keys.transpose(-1, -2)) / self.sqrt_hidden_size)
+        attention_output = torch.matmul(attention_weights, vals).squeeze(2)
+        output = self.out(attention_output)
 
-        return x, atten_weights
+        return output, atten_weights
 
+
+class ExMLPWithAttention(nn.Module):
+    def __init__(self, input_size, output_size, hidden_size, atten_size):
+        super(ExMLPWithAttention, self).__init__()
+        self.attention_layer = ExRestSelfAtten(input_size, hidden_size, atten_size)
+        self.mlp_layer = ExMLP(hidden_size, output_size, hidden_size)
+
+    def name(self):
+        return "MLP_with_Attention"
+
+    def forward(self, x):
+        attention_output, attention_weights = self.attention_layer(x)
+        sub_scores = self.mlp_layer(attention_output)
+        return sub_scores, attention_weights
 
 # prints portion of the review (20-30 first words), with the sub-scores each work obtained
 # prints also the final scores, the softmaxed prediction values and the true label values
@@ -199,7 +227,7 @@ if run_recurrent:
         model = ExGRU(input_size, output_size, hidden_size)
 else:
     if atten_size > 0:
-        model = ExRestSelfAtten(input_size, output_size, hidden_size)
+        model = ExMLPWithAttention(input_size, output_size, hidden_size, atten_size)
     else:
         model = ExMLP(input_size, output_size, hidden_size)
 
@@ -261,7 +289,6 @@ for epoch in range(num_epochs):
         loss = criterion(output, labels)
         accuracy = (output.argmax(1) == labels.argmax(1)).float().mean()
 
-
         # optimize in training iterations
 
         if not test_iter:
@@ -292,15 +319,15 @@ for epoch in range(num_epochs):
                 print_review(reviews_text[0], nump_subs[0, :, 0], nump_subs[0, :, 1], labels[0, 0], labels[0, 1])
 
     # accuracy = epoch_accuracy / len(train_dataset)
-    test_accuracies.append(sum(epoch_test_accuracies)/len(epoch_test_accuracies))
-    train_accuracies.append(sum(epoch_train_accuracies)/len(epoch_train_accuracies))
+    test_accuracies.append(sum(epoch_test_accuracies) / len(epoch_test_accuracies))
+    train_accuracies.append(sum(epoch_train_accuracies) / len(epoch_train_accuracies))
 
 # saving the model
-torch.save(model, model.name() + ".pth")
+torch.save(model.state_dict(), model.name() + ".pth")
 
 fig, ax = plt.subplots()
 ax.plot(train_accuracies, label='Train accuracy')
 ax.plot(test_accuracies, label='Test accuracy')
 ax.legend()
-plt.title(f"{model.name()}, Hidden size: {hidden_size}")
+plt.title(f"{model.name()}")
 plt.show()
