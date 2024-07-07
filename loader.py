@@ -40,7 +40,8 @@ def load_data_set(load_my_reviews=False):
     test_data=data[Train_size:]
     if load_my_reviews:
         my_data = pd.DataFrame({"review": my_test_texts, "sentiment": my_test_labels})
-        test_data=test_data.append(my_data)
+        # test_data=pd.concat([test_data, pd.DataFrame(my_data)], ignore_index=True)#test_data.append(my_data)
+        test_data=pd.DataFrame(my_data)
     test_data=test_data.reset_index(drop=True)
     test_iter=ReviewDataset(test_data["review"],test_data["sentiment"])
     return train_iter, test_iter
@@ -81,10 +82,11 @@ def collact_batch(batch):
 ##########################
 
 my_test_texts = []
-my_test_texts.append(" this movie is very very bad ,the worst movie ")
+my_test_texts.append("This movie is not the best movie, nor the most interesting one")
 my_test_texts.append(" this movie is so great")
-my_test_texts.append("I really  liked the fish and animations the anther casting was not so good ")
-my_test_labels = ["neg", "pos", "pos"]
+my_test_texts.append("This movie is bad")
+my_test_texts.append("I thought it will be the worst and most boring movie I have ever seen, But it was nice")
+my_test_labels = ["neg", "pos", "neg", "pos"]
 
 ##########################
 ##########################
