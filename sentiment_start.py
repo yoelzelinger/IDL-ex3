@@ -17,18 +17,18 @@ batch_size = 32
 output_size = 2
 hidden_size = 32  # to experiment with
 
-run_recurrent = False  # else run Token-wise MLP
-use_RNN = False  # otherwise GRU
-atten_size = 5  # atten > 0 means using restricted self atten
+run_recurrent = True  # else run Token-wise MLP
+use_RNN = True  # otherwise GRU
+atten_size = 0  # atten > 0 means using restricted self atten
 
-reload_model = True
+reload_model = False
 num_epochs = 10
 learning_rate = 0.001
 test_interval = 50
 
 # Loading sataset, use toy = True for obtaining a smaller dataset
 
-train_dataset, test_dataset, num_words, input_size = ld.get_data_set(batch_size, toy=True)
+train_dataset, test_dataset, num_words, input_size = ld.get_data_set(batch_size, toy=False)
 
 
 # Special matrix multipication layer (like torch.Linear but can operate on arbitrary sized
@@ -255,6 +255,8 @@ test_loss = 1.0
 
 train_accuracies = []
 test_accuracies = []
+train_losses = []
+test_losses = []
 # training steps in which a test step is executed every test_interval
 
 for epoch in range(num_epochs):
@@ -262,6 +264,8 @@ for epoch in range(num_epochs):
     itr = 0  # iteration counter within each epoch
     epoch_test_accuracies = []
     epoch_train_accuracies = []
+    epoch_test_losses = []
+    epoch_train_losses = []
     for labels, reviews, reviews_text in train_dataset:  # getting training batches
 
         itr = itr + 1
@@ -301,19 +305,21 @@ for epoch in range(num_epochs):
 
         # optimize in training iterations
 
-        # if not test_iter:
-        #     optimizer.zero_grad()
-        #     loss.backward()
-        #     optimizer.step()
+        if not test_iter:
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
         # averaged losses
         if test_iter:
             test_loss = 0.8 * float(loss.detach()) + 0.2 * test_loss
             epoch_test_accuracies.append(accuracy)
+            epoch_test_losses.append(test_loss)
         else:
             train_loss = 0.9 * float(loss.detach()) + 0.1 * train_loss
             if (itr - 1) % 50 == 0:
                 epoch_train_accuracies.append(accuracy)
+                epoch_train_losses.append(train_loss)
 
         if test_iter:
             print(
@@ -331,6 +337,8 @@ for epoch in range(num_epochs):
     # accuracy = epoch_accuracy / len(train_dataset)
     test_accuracies.append(sum(epoch_test_accuracies) / len(epoch_test_accuracies))
     train_accuracies.append(sum(epoch_train_accuracies) / len(epoch_train_accuracies))
+    train_losses.append(sum(epoch_train_losses)/len(epoch_train_losses))
+    test_losses.append(sum(epoch_test_losses)/len(epoch_test_losses))
 
 # saving the model
 torch.save(model.state_dict(), model.name() + ".pth")
@@ -338,6 +346,13 @@ torch.save(model.state_dict(), model.name() + ".pth")
 fig, ax = plt.subplots()
 ax.plot(train_accuracies, label='Train accuracy')
 ax.plot(test_accuracies, label='Test accuracy')
+ax.legend()
+plt.title(f"{model.name()}")
+plt.show()
+
+fig, ax = plt.subplots()
+ax.plot(train_losses, label='Train losses')
+ax.plot(test_losses, label='Test losses')
 ax.legend()
 plt.title(f"{model.name()}")
 plt.show()
