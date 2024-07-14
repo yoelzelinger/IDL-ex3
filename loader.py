@@ -82,10 +82,10 @@ def collact_batch(batch):
 ##########################
 
 my_test_texts = []
-my_test_texts.append("This movie is not the best movie, nor the most interesting one")
+my_test_texts.append("This movie is not good, and not interesting")
 my_test_texts.append(" this movie is so great")
 my_test_texts.append("This movie is bad")
-my_test_texts.append("I thought it will be the worst and most boring movie I have ever seen, But it was nice")
+my_test_texts.append("this movie is not bad")
 my_test_labels = ["neg", "pos", "neg", "pos"]
 
 ##########################

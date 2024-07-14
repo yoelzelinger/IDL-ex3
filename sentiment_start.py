@@ -21,14 +21,14 @@ run_recurrent = False  # else run Token-wise MLP
 use_RNN = False  # otherwise GRU
 atten_size = 5  # atten > 0 means using restricted self atten
 
-reload_model = False
-num_epochs = 1
+reload_model = True
+num_epochs = 10
 learning_rate = 0.001
 test_interval = 50
 
 # Loading sataset, use toy = True for obtaining a smaller dataset
 
-train_dataset, test_dataset, num_words, input_size = ld.get_data_set(batch_size, toy=False)
+train_dataset, test_dataset, num_words, input_size = ld.get_data_set(batch_size, toy=True)
 
 
 # Special matrix multipication layer (like torch.Linear but can operate on arbitrary sized
@@ -128,18 +128,22 @@ class ExMLP(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, hidden_size, max_len=5000):
+    def __init__(self, input_size, representation_size):
         super(PositionalEncoding, self).__init__()
-        pe = torch.zeros(max_len, hidden_size)
-        position = torch.arange(0, max_len).unsqueeze(1).float()
-        div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * -(np.log(10000.0) / hidden_size))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
+
+        pe = np.zeros((input_size, representation_size))
+        for pos in range(input_size):
+            for i in range(0, representation_size, 2):
+                arg = pos / 10000 ** (i / representation_size)
+                pe[pos, i] = np.sin(arg)
+                pe[pos, i + 1] = np.cos(arg)
+        pe = torch.from_numpy(pe).float().unsqueeze(0)
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        return x + self.pe[:, :x.size(1)]
+        x += self.pe[:x.size(0), :]
+        return x
+
 
 class ExRestSelfAtten(nn.Module):
     def __init__(self, input_size, output_size, hidden_size):
@@ -159,13 +163,13 @@ class ExRestSelfAtten(nn.Module):
         self.W_v = MatMul(hidden_size, hidden_size, use_bias=False)
         self.out = MatMul(hidden_size, output_size)
 
-        self.positional_encoding = PositionalEncoding(hidden_size)
+        self.positional_encode = PositionalEncoding(input_size, 100)
 
     def name(self):
         return "MLP_atten"
 
     def forward(self, x):
-        x = self.positional_encoding(x)
+        x = self.positional_encode(x)
         x = self.layer1(x)
         x = self.ReLU(x)
 
@@ -192,13 +196,13 @@ class ExRestSelfAtten(nn.Module):
         attention_output = torch.matmul(attention_weights, vals).squeeze(2)
         output = self.out(attention_output)
 
-        return output, atten_weights
+        return output, attention_weights
 
 
 class ExMLPWithAttention(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size, atten_size):
+    def __init__(self, input_size, output_size, hidden_size):
         super(ExMLPWithAttention, self).__init__()
-        self.attention_layer = ExRestSelfAtten(input_size, hidden_size, atten_size)
+        self.attention_layer = ExRestSelfAtten(input_size, hidden_size, hidden_size)
         self.mlp_layer = ExMLP(hidden_size, output_size, hidden_size)
 
     def name(self):
@@ -233,7 +237,7 @@ if run_recurrent:
         model = ExGRU(input_size, output_size, hidden_size)
 else:
     if atten_size > 0:
-        model = ExMLPWithAttention(input_size, output_size, hidden_size, atten_size)
+        model = ExMLPWithAttention(input_size, output_size, hidden_size)
     else:
         model = ExMLP(input_size, output_size, hidden_size)
 
@@ -297,10 +301,10 @@ for epoch in range(num_epochs):
 
         # optimize in training iterations
 
-        if not test_iter:
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+        # if not test_iter:
+        #     optimizer.zero_grad()
+        #     loss.backward()
+        #     optimizer.step()
 
         # averaged losses
         if test_iter:
